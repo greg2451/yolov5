@@ -111,18 +111,18 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     publisher = rospy.Publisher('vision_detection', ContactsList, queue_size = 10)
     
     # Half
-    half &= (pt or engine) and device.type != 'cpu'  # half precision only supported by PyTorch on CUDA
-    if pt:
+    half &= (pt or jit or engine) and device.type != 'cpu'  # half precision only supported by PyTorch on CUDA
+    if pt or jit:
         model.model.half() if half else model.model.float()
 
     # Dataloader
     if webcam:
         view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
-        dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt and not jit)
+        dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
     else:
-        dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt and not jit)
+        dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt)
         bs = 1  # batch_size
     vid_path, vid_writer = [None] * bs, [None] * bs
 
