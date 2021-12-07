@@ -222,13 +222,13 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 if not no_kalman :
-                	tracked_objects = mot_tracker.update(reversed(det).cpu())
-                	detection_number = 0
-                	confs = det[:,4]
-                	dt[2] += time_sync() - t3
+                    tracked_objects = mot_tracker.update(reversed(det).cpu())
+                    detection_number = 0
+                    confs = det[:,4]
+                    dt[2] += time_sync() - t3
 
                 else:
-                	tracked_objects = reversed(det)
+                    tracked_objects = reversed(det)
 
                 # Write results
                 for *xyxy, conf, cls in tracked_objects:
