@@ -1,3 +1,5 @@
+#!/home/grego/Documents/envs/cv_inference/bin/python
+
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
 """
 Run inference on images, videos, directories, streams, etc.
@@ -14,6 +16,7 @@ Usage:
 
 import argparse
 import os
+from socket import MsgFlag
 import sys
 from pathlib import Path
 
@@ -34,7 +37,18 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 
+# For kalman tracking
 import track.sort  
+import time
+
+# For ROS
+import rospy
+from yolo_ros.msg import ShipInfo
+from yolo_ros.msg import ContactsList
+from projection import projection
+
+
+    
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -67,6 +81,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         max_age=1, # parameter of duration
         save_kalman=False,
         reticle=False,
+        rt=False,
         ):
     
     source = str(source)
@@ -90,7 +105,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Initialize Kalman filtering.  
     if not no_kalman :
         mot_tracker = track.sort.Sort(min_hits=min_hits, max_age=max_age)
-        
+    
+    # Initialize ROS node
+    rospy.init_node('VisionTrackProducer', anonymous=True)    
+    publisher = rospy.Publisher('vision_detection', ContactsList, queue_size = 10)
+    
     # Half
     half &= (pt or engine) and device.type != 'cpu'  # half precision only supported by PyTorch on CUDA
     if pt:
@@ -110,12 +129,43 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
     # To prevent an error if no videos
     dataset.frame = 0
-    model_name = weights[0].replace('.\\','').replace('.pt','')
+    # model_name = weights[0].replace('.\\','').replace('.pt','')
     
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
+    
+    if rt:
+        skip_frames = 0
+        time_delta = 0
+        fps = 30
+        
+    msg = {
+        'latitude': 0,
+        'longitude': 0,
+        'altitude': 0,
+        'yaw': 0,
+        'tilt': 0,
+        'roll': 0,
+        }
+    # Define the callback function when receiving CI data.
+    def callback(data):
+        nonlocal msg
+        msg = {attr: getattr(data, attr) for attr in msg.keys()}
+        
+    rospy.Subscriber('chatter', ShipInfo, callback, queue_size = 1)    
+    rate = rospy.Rate(10)
     for path, im, im0s, vid_cap, s in dataset:
+        if rt:
+            if skip_frames > 0:
+                skip_frames -= 1
+                continue
+            else :
+                time.sleep(time_delta)
+        
+        geo_info_at_time_t = msg.copy()
+        
+        t1 = time_sync()
         if (not no_kalman) & (dataset.frame == 1) :
             del mot_tracker
             track.sort.KalmanBoxTracker.count = 0
@@ -125,7 +175,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 line = ('frame', 'obj_id','detect_score', 'xtl','ytl','xbr','ybr')
                 with open(save_kalman_path, 'w') as f:
                     f.write(('%s,' * len(line)).rstrip()[:-1] % line + '\n')
-        t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -187,6 +236,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         obj_id = conf
                         conf = confs[detection_number]
                         detection_number += 1
+
+                    if True:           # Format and send the message !
+                        out_msg = projection(xyxy, obj_id, geo_info_at_time_t)
+                        publisher.publish(out_msg)
+                    
                     if save_txt & (not save_kalman):  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
@@ -210,8 +264,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
-                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-
+                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)          
+            
             # Add the middle rectangle to visualize the center.
             if reticle:
                 h,w,_ = im0.shape
@@ -249,7 +303,18 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             save_path += '.mp4'
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
-
+            
+        rate.sleep()
+        
+        
+        if rt:
+            t_end = time_sync()
+            if dataset.mode != 'image':
+                
+                # Compute number of frames to skip in order to be real time.
+                skip_frames = int(fps * (t_end - t1))
+                time_delta = (fps * (t_end - t1) - skip_frames)/fps
+            
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
@@ -287,8 +352,6 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
-    opt = parser.parse_args()
-    opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     
     # Kalman args
     parser.add_argument('--save-kalman', action='store_true', help='save labels as a csv file with object tracking')
@@ -296,9 +359,14 @@ def parse_opt():
     parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
     
+    # ROS args
+    parser.add_argument('--rt', action='store_true', help="don't use kalman filtering")
+    
     # IPD args    
     parser.add_argument('--reticle', action='store_true', help='show center of screen.')
     
+    opt = parser.parse_args()
+    opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
     return opt
 
@@ -310,4 +378,9 @@ def main(opt):
 
 if __name__ == "__main__":
     opt = parse_opt()
+    opt.view_img = True
+    opt.source = "/home/grego/Documents/data/ShipSpotting1.mp4"
+    opt.weights = '/home/grego/Documents/yolov5old/gdn.engine'
+    opt.nosave = True
+    opt.rt = True
     main(opt)
