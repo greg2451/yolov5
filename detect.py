@@ -34,6 +34,9 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 
+# For kalman tracking
+import track.sort  
+import time
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -61,7 +64,14 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
+        no_kalman=False, # use kalman filtering
+        min_hits=5, # parameter for kalman filter
+        max_age=1, # parameter of duration
+        save_kalman=False,
+        reticle=False,
+        real_time_inference=False,
         ):
+    
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -80,6 +90,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     stride, names, pt, jit, onnx, engine = model.stride, model.names, model.pt, model.jit, model.onnx, model.engine
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
+
+    # Initialize Kalman filtering.  
+    if not no_kalman :
+        mot_tracker = track.sort.Sort(min_hits=min_hits, max_age=max_age)
+
+
     # Half
     half &= (pt or jit or engine) and device.type != 'cpu'  # half precision only supported by PyTorch on CUDA
     if pt or jit:
@@ -96,11 +112,34 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         bs = 1  # batch_size
     vid_path, vid_writer = [None] * bs, [None] * bs
 
+    if real_time_inference:
+        skip_frames = 0
+        time_delta = 0
+        fps = 25 # Adjusting fps
+    
+    # Get model name TODO
+    model_name = weights[0].replace('.\\','').replace('.pt','')
+    
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
     for path, im, im0s, vid_cap, s in dataset:
+        if real_time_inference:
+            if skip_frames > 0:
+                skip_frames -= 1
+                continue
+            else :
+                time.sleep(time_delta)
         t1 = time_sync()
+        if (not no_kalman) & (getattr(dataset, 'frame', 1) == 1) :
+            del mot_tracker
+            track.sort.KalmanBoxTracker.count = 0
+            mot_tracker = track.sort.Sort(min_hits=min_hits, max_age=max_age)
+            if save_kalman:
+                save_kalman_path = '.'.join(dataset.files[dataset.count].split('.')[:-1]) + f'_{model_name}' +'.csv'
+                line = ('frame', 'obj_id','detect_score', 'xtl','ytl','xbr','ybr')
+                with open(save_kalman_path, 'w') as f:
+                    f.write(('%s,' * len(line)).rstrip()[:-1] % line + '\n')
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -147,21 +186,57 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                if not no_kalman :
+                    tracked_objects = mot_tracker.update(reversed(det).cpu())
+                    detection_number = 0
+                    confs = det[:,4]
+                    dt[2] += time_sync() - t3
+
+                else:
+                    tracked_objects = reversed(det)
+
                 # Write results
-                for *xyxy, conf, cls in reversed(det):
-                    if save_txt:  # Write to file
+                for *xyxy, conf, cls in tracked_objects:
+                    if not no_kalman:
+                        obj_id = conf
+                        conf = confs[detection_number]
+                        detection_number += 1
+
+                    if save_txt & (not save_kalman):  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
+                    if (not no_kalman) & save_kalman :
+                        # save_path = dataset.files[dataset.count].split(os.sep)[-1].split('.')[0]
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        rounding = lambda x : round(x,4)
+                        line = (getattr(dataset, 'frame', 1), int(obj_id), conf,*[rounding(el) for el in xywh])
+                        with open(save_kalman_path, 'a') as f:
+                            f.write(('%g,' * len(line)).rstrip()[:-1] % line + '\n')
+
                     if save_img or save_crop or view_img:  # Add bbox to image
-                        c = int(cls)  # integer class
-                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
+                        if not no_kalman:
+                            c = int(obj_id)
+                            label = None if hide_labels else (str(c) if hide_conf else f'{c} {conf:.3f}')
+                        else:
+                            c = int(cls)  # integer class
+                            label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-
+            
+            # Add the middle rectangle to visualize the center.
+            if reticle:
+                h,w,_ = im0.shape
+                size = 0.02*h
+                xyxy = [0.5*w + size, 0.5*h + size,0.5*w - size,0.5*h - size]
+                annotator.box_label(xyxy, None, color=(0,153,255))
+                size = 0.003*h
+                xyxy = [0.5*w + size, 0.5*h + size,0.5*w - size,0.5*h - size]
+                annotator.box_label(xyxy, None, color=(0,20,153))
+                
             # Print time (inference-only)
             LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
 
@@ -190,6 +265,15 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
+        if real_time_inference:
+            t_end = time_sync()
+            if dataset.mode != 'image':
+                
+                # Compute number of frames to skip in order to be real time.
+                skip_frames = int(fps * (t_end - t1))
+                time_delta = (1 + skip_frames - fps * (t_end - t1))/fps
+        
+        
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
@@ -227,6 +311,19 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
+    
+    # Kalman args
+    parser.add_argument('--save-kalman', action='store_true', help='save labels as a csv file with object tracking')
+    parser.add_argument('--no-kalman', action='store_true', help="don't use kalman filtering")
+    parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
+    parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
+    
+    # ROS args
+    parser.add_argument('--rt', '--real-time-inference', action='store_true', dest='real_time_inference', help="don't use kalman filtering")
+    
+    # IPD args    
+    parser.add_argument('--reticle', action='store_true', help='show center of screen.')    
+    
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
