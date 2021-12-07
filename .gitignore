@@ -47,6 +47,7 @@ VOC/
 *.weights
 *.pt
 *.pb
+*.engine
 *.onnx
 *.mlmodel
 *.torchscript
