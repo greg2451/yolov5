@@ -30,11 +30,14 @@ from utils.general import (LOGGER, check_dataset, check_requirements, check_yaml
                            xywh2xyxy, xywhn2xyxy, xyxy2xywhn)
 from utils.torch_utils import torch_distributed_zero_first
 
+import smdistributed.dataparallel.torch.distributed as dist
+
 # Parameters
 HELP_URL = 'https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data'
 IMG_FORMATS = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo']  # acceptable image suffixes
 VID_FORMATS = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
-WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))  # DPP
+# WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))  # DPP
+WORLD_SIZE = dist.get_world_size()
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))  # number of multiprocessing threads
 
 # Get orientation exif tag
@@ -111,7 +114,7 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // WORLD_SIZE, batch_size if batch_size > 1 else 0, workers])  # number of workers
-    sampler = None if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
+    sampler = None if rank == -1 else distributed.DistributedSampler(dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=shuffle)
     loader = DataLoader if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
     return loader(dataset,
                   batch_size=batch_size,

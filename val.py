@@ -248,7 +248,8 @@ def run(data,
 
     # Print results
     pf = '%20s' + '%11i' * 2 + '%11.3g' * 4  # print format
-    LOGGER.info(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
+    # LOGGER.info(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
+    LOGGER.info('all', seen, nt.sum(), "P=%.5f"%mp+";", "R=%.5f"%mr+";" ,"map50="+"%.6f"%map50 +";" , "map="+"%.6f"%map+";")
 
     # Print results per class
     if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
