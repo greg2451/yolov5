@@ -1,0 +1,238 @@
+
+ Le dossier contient : 
+ - pipeline.py : code essentiel pour faire tourner la pipeline AWS d'entrainement 
+ - yolov5 : code source de YOLO légèrement modifié (voir plus bas)
+ 
+ Par ailleurs, quelques éléments supplémentaires sont présents sur ce Notebook pour aider au déploiement et à l'entrainement
+ - deploy.sh : un exemple de code pour récupérer et instancier le dernier modèle entrainé 
+ - scriptDataset : Contient des scripts permettant de scrapper le contenu de certains datasets et de les mettre au format d'entrainement YOLO (à partir de leur fichier d'annotation)
+ - Track : un dossier contenant le code nécessaire à la mise en place d'un filtre de Kalman (voir plus bas) 
+ 
+ 
+ 
+ 
+ ########################## UTILISATION PIPELINE ####################################################
+ 
+ 
+ 
+ ************************* Upload des données sur S3 et déclenchement ***************************************************** 
+ 
+ 
+ On utilise la CLI (Command Line Interface) depuis une machine locale connectée à Internet 
+ 
+ Pour l'installer : 
+	 $ sudo apt install awscli
+	 $ aws configure 
+	 
+	 Rentrer les informations demandées : https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.htmleu-
+		 - Pour obtenir la paire clef publique / clef privée, il faut se rendre avec un compte administarteur dans IAM > Users > nomDeLutilisateur > AccessKey
+		 Dans la partie correspondant aux accès CLI, il faut créer une nouvelle clef et télécharger le fichier csv à ce moment. Un maximum de deux clefs seulement est possible, si il y a déjà 2 clefs il faut en supprimer une pour pouvoir réaliser l'opération. 
+
+
+		- region : eu-west-3
+        - format output : json 
+
+
+Pour upload des données : 
+$ aws s3 cp <fichierSource> <destinationS3> 	
+	
+La commande suivante lance un entrainement sur le contenu de "training" : 
+$ aws s3 cp test.jpg s3://boat-detection-dataset/seaowlDataset/start/ 
+Les métriques sont calculées sur le contenu de "validation" 
+ 
+ ****************************************** Vérifications *********************************************
+ 
+ Dans SageMaker > Training > Training Jobs on peut consulter les entrainements précédents et les métriques associées. 
+ 
+
+En cas d'erreur d'entrainement, il peut suffire dans un premier temps de lancer l'entrainement depuis un terminal : 
+File > New > Terminal puis entrer python3 pipeline.Py
+
+En cas d'échec, il peut être utile de debugger via un entrainement hors pipeline pour consulter les messages d'erreurs. 
+Pour cela, il suffit de décommenter la ligne suivante dans pipeline.py : 
+pytorch_estimator.fit({'train': s3_base_uri,'modelImport': modelUri})
+et de commenter le reste du fichier. L'entrainement peut alors être lancé via un terminal : python3 pipeline.py 
+Cela démarre un Training Job et l'on peut consulter directement les logs d'erreurs dans le terminal ou alors dans SageMaker > Training > Training Jobs > View logs (en bas)
+	
+	
+************************************* Déploiement du modèle **************************************************************
+
+
+Installer yolo en local : 
+	$ git clone https://github.com/ultralytics/yolov5.git
+	$ cd yolov5 ; pip install -r requirements.txt ; cd ..
+	
+Lancer le téléchargement du dernier modèle et l'instancier sur un exemple simple : 
+	$ ./deploy.sh 
+
+################### INSTRUCTIONS POUR METTRE EN PLACE TOUTE LA PIPELINE ###########################################"
+
+
+
+*************************** Pipeline d'entrainement ****************************************************
+
+Se rendre dans SageMaker 
+Dans l'onglet gauche, se rendre dans Notebook 
+
+Il suffit alors d'ouvir testNotebook pour accèder au code de la pipeline 
+
+
+La pipeline est définie dans pipeline.py 
+
+Le code source de YOLO dans le dossier yolov5 a été modifié, notamment pour pouvoir afficher des métriques récupérables par SageMaker via les regex dans pipeline.py. 
+Liste exhaustive des modifications : 
+	- import json dans train.py
+
+	- Modifier le path dans le data/seaowl.yaml :
+	path: /opt/ml/input/data/train/seaowlDataset
+
+	- requirements.txt 
+	torch==1.8.1
+	torchvision==0.9.1
+
+
+	- Dans test.py : 
+	Remplacer : 
+	print(pf % ('all', seen, nt.sum(), mp, mr , map50, map))
+	par : 
+	print('all', seen, nt.sum(), "P=%.5f"%mp+";", "R=%.5f"%mr+";" ,"map50="+"%.6f"%map50 +";" , "map="+"%.6f"%map+";")
+	
+	- Tout en haut de train.py pour récupérer le modèle à entrainer : 
+	os.system('tar -xvzf /opt/ml/input/data/modelImport/model.tar.gz')
+    print("best.pt SHA256 used :")
+    os.system("sha256sum exp/weights/best.pt")
+    print("Working directory path for train.py:")
+    os.system('pwd')
+    print("Working directory content :")
+    os.system('ls')
+	
+	
+	
+Note : le "train" dans le path opt/ml/input... correspond à la channel spécifiée dans la pipeline, c'est un moyen de passer des données en entrée d'un algorithme.  
+
+
+
+******** Mise en place du mécanisme de déclenchement de la pipeline ************************************
+
+
+Schéma général : 
+
+
+S3 --> CloudTrail --> EventBridge --> SageMakerPipeline 
+
+
+
+Documentation modifiée à partir de : https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-log-s3-data-events.html
+
+
+Step 1: Configure your AWS CloudTrail trail
+
+	To log data events for an S3 bucket to AWS CloudTrail and EventBridge, you first create a trail. A trail captures API calls and related events in your account and then delivers the log files 		to an S3 bucket that you specify. You can update an existing trail or create one.
+
+	For more information, see Data Events in the AWS CloudTrail User Guide.
+
+	To create a trail
+
+	    Open the CloudTrail console at https://console.aws.amazon.com/cloudtrail/
+
+	    .
+
+	    Choose Trails, Create trail.
+
+	    For Trail name, type a name for the trail.
+
+	    For Storage location, in Create a new S3 bucket.
+
+	    Disable Log file SSE-KMS encryption
+
+	    Choose Next.
+
+	    For Event type, choose Data events
+
+	    For Data events : 
+	
+		To log data events for specific Amazon S3 objects in a bucket, specify an S3 bucket and the object prefix. In our case : seaowlDataset/start/
+
+	    For each resource, choose whether to log Read events, Write events, or both. In our case, only Write 
+
+	    Choose Next.
+
+	    Choose Create trail.
+
+
+	
+Step 2: Create a Rule
+
+	Create a rule to run the Sagemaker Pipeline. This rule runs in response to an Amazon S3 data event.
+
+	To create a rule
+
+	    Open the Amazon EventBridge console at https://console.aws.amazon.com/events/
+
+
+	In the navigation pane, choose Rules.
+
+	Choose Create rule.
+
+	Enter a name and description for the rule.
+
+	For Define pattern, do the following:
+
+	    Choose Event Pattern.
+
+	    Choose Pre-defined pattern by service.
+
+	    For Service provider, choose AWS.
+
+	    For Service Name, choose Simple Storage Service (S3).
+
+	    For Event type, choose Object Level Operations.
+
+	    Choose Specific operation(s), PutObject.
+
+	    By default, the rule matches data events for all buckets in the Region. To match data events for specific buckets, choose Specify bucket(s) by name and enter one or more buckets.
+
+	For Select event bus, choose AWS default event bus. When an AWS service in your account emits an event, it goes to your account’s default event bus.
+
+	For Targets, choose SageMakerPipelines 
+
+	Select the specific pipeline (yoloPipeline) 
+
+	Choose Create.
+
+
+
+ 
+ 
+ 
+
+######################### Mettre en place le filtre de Kalman sur yolov5 #########################
+
+
+
+Modification du code source de yolov5 pour y ajouter un filtre de Kalman : 
+
+1) Ajouter le répertoire Track du code d'Aous dans le répertoire de yolov5 
+
+2) Importer le tracker dans le code de détection, concretement, dans detect.py, ajouter tout en haut : 
+
+#Define Kalman filter tracker : 
+from Track.sort import *
+mot_tracker = Sort() 
+kalman = True 
+
+3) Utilisation du filtre de Kalman juste avant l'affichage, dans detect.py : 
+		
+                for *xyxy, conf, cls in tracked_objects: 
+		
+		est remplacé par : 
+		
+                #Kalman filter
+                if kalman:
+                	tracked_objects = mot_tracker.update(reversed(det))
+                else:
+                	tracked_objects = reversed(det)
+                
+                
+                # Write results
+                for *xyxy, conf, cls in tracked_objects:
