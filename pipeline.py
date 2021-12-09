@@ -25,7 +25,9 @@ pytorch_estimator = PyTorch('train.py',
                                 {'Name': 'mAP', 'Regex': 'map=(.*?);'}
                             ],
                             hyperparameters = {'epochs': 10, 'batch-size': 16, 'data': 'data/seaowl.yaml', 'weights' : 'exp/weights/best.pt', 'hyp' : 'data/hyps/gregdan.finetune.yaml', 'cfg' : 'models/gregdan_cfg.yaml'}, 
-                            enable_sagemaker_metrics=True)
+                            enable_sagemaker_metrics=True,
+                            distribution={ "smdistributed": { "dataparallel": { "enabled": True } } },
+                            )
 
 # Pour récupérer le dernier modèle en date, mettre dans les arguments 'exp/weights/best.pt': 
 
