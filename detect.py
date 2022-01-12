@@ -45,7 +45,7 @@ import time
 import rospy
 from yolo_ros.msg import ShipInfo
 from yolo_ros.msg import ContactsList
-from projection import projection
+from projection import projection, update_camera_quaternions
 
 
     
@@ -163,7 +163,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             else :
                 time.sleep(time_delta)
         
-        geo_info_at_time_t = msg.copy()
+        boat_quaternion = msg.copy()
+        camera_quaternion = update_camera_quaternions(boat_quaternion)
         
         t1 = time_sync()
         if (not no_kalman) & (dataset.frame == 1) :
@@ -238,7 +239,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         detection_number += 1
 
                     if True:           # Format and send the message !
-                        out_msg = projection(xyxy, obj_id, geo_info_at_time_t)
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        out_msg = projection(xywh, obj_id, camera_quaternion)
                         publisher.publish(out_msg)
                     
                     if save_txt & (not save_kalman):  # Write to file
