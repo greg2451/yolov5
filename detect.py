@@ -56,8 +56,9 @@ import time
 # For ROS
 import rospy
 from yolo_ros.msg import ShipInfo
+from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
 from yolo_ros.msg import ContactsList
-from projection import projection, update_camera_quaternions
+from projection import Projecteur
 
 
     
@@ -153,21 +154,21 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         time_delta = 0
         fps = 30
         
-    msg = {
-        'latitude': 0,
-        'longitude': 0,
-        'altitude': 0,
-        'yaw': 0,
-        'tilt': 0,
-        'roll': 0,
-        }
+    QuatMsg = SbgEkfQuat()
+    NavMsg = SbgEkfNav()
     # Define the callback function when receiving CI data.
-    def callback(data):
-        nonlocal msg
-        msg = {attr: getattr(data, attr) for attr in msg.keys()}
-        
-    rospy.Subscriber('chatter', ShipInfo, callback, queue_size = 1)    
+    def callback_nav(data):
+        nonlocal NavMsg
+        NavMsg = data
+
+    def callback_quat(data):
+        nonlocal QuatMsg
+        QuatMsg = data
+
+    rospy.Subscriber('Quat', SbgEkfQuat, callback_quat, queue_size = 1)    
+    rospy.Subscriber('Nav', SbgEkfNav, callback_nav, queue_size = 1)    
     rate = rospy.Rate(10)
+    projecteur = Projecteur()
     for path, im, im0s, vid_cap, s in dataset:
         if rt:
             if skip_frames > 0:
@@ -176,8 +177,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             else :
                 time.sleep(time_delta)
         
-        boat_quaternion = msg.copy()
-        camera_quaternion = update_camera_quaternions(boat_quaternion)
+        # Update proj with current values.
+        projecteur.update(
+            QuatMsg=QuatMsg,
+            NavMsg=NavMsg,
+        )
         
         t1 = time_sync()
         if (not no_kalman) & (dataset.frame == 1) :
@@ -252,8 +256,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         detection_number += 1
 
                     if True:           # Format and send the message !
+                        camera_id = i # Not this generally but will depend which camera we use simutaneously.
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        out_msg = projection(xywh, obj_id, camera_quaternion)
+                        out_msg = projecteur(xywh, camera_id, obj_id, rosmsg=True)
                         publisher.publish(out_msg)
                     
                     if save_txt & (not save_kalman):  # Write to file

@@ -61,10 +61,10 @@ class Projecteur:
 			degrees=True,
 		)
 		
-	def update_boat_orientation(
+	def update(
 		self,
-        boat_quaternion,
-        boat_position
+        QuatMsg,
+        NavMsg,
     ):
 		"""Met à jour la position du bateau et celles des caméras dans le référentiel de la CI.
 
@@ -72,14 +72,16 @@ class Projecteur:
 			boat_quaternion (array): Le quaternion représentant les coordonnées angulaires du bateau.
 		"""
 		
-		self.boat_orientation = R.from_quat(boat_quaternion)
+		self.boat_orientation = R.from_quat(QuatMsg.quaternion)
 		self.camera_orientation = self.camera_orientation_initial * self.boat_orientation 
-		self.boat_position = boat_position
+		self.boat_position = NavMsg
 
 	def __call__(
 		self,
 		xywh,
 		camera_id,
+		obj_id,
+		rosmsg = False
     ):
 		"""
 		Etant donné les coordonnées d'un point en convention OpenCV, renvoie le gisement de ce point (en degrés) et la position de ce point. 
@@ -124,17 +126,34 @@ class Projecteur:
 		angular_height = pixel2angle(y-h/2) - pixel2angle(y+h/2) # Convention OpenCV, (0,0) est le coin supérieur gauche.
 
 		# Calcul de la distance en considérant son altitude nulle (dépendance extrêmement sensible en l'élévation).
-		distance = (self.camera_height - self.boat_position['altitude']) / tan(elevation)
+		distance = (self.camera_height - self.boat_position.altitude) / tan(elevation)
 
 		# Déduction de la hauteur et largeur du plus petit rectangle couvrant la cible.
 		target_height = 2 * distance * tan(angular_height/2)
 		target_width = 2 * distance * tan(angular_width/2)
 		
 		# Déduction des coordonnées GPS de la cible.
-		lat_target, lon_target = new_point_offset(self.boat_position['lat'], self.boat_position['lon'], azimuth, distance)
+		lat_target, lon_target = new_point_offset(
+			self.boat_position.lat,
+			self.boat_position.lon,
+			azimuth,
+			distance,
+		)
 		
+		if rosmsg :
+			message = ContactsList(
+				id = int(obj_id),
+				status = 1,
+				latitude = lat_target,
+				longitude = lon_target,
+				speed = 0,
+				size = target_height * target_width
+			)
 
-		return lat_target, lon_target, (target_width, target_height), distance
+			return message
+		
+		else :
+			return lat_target, lon_target, (target_width, target_height), distance
 
 
 def projection(xyxy, obj_id, camera_quaternion, camera_id) :

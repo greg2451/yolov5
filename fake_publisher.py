@@ -38,26 +38,57 @@
 
 import rospy
 from yolo_ros.msg import ShipInfo
+from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
+from scipy.spatial.transform import Rotation as R
+from geometry_msgs.msg import Quaternion
+
 import numpy as np
 
 def talker():
-    pub = rospy.Publisher('chatter', ShipInfo)
+    quat_pub = rospy.Publisher('Quat', SbgEkfQuat)
+    nav_pub = rospy.Publisher('Nav', SbgEkfNav)
     rospy.init_node('Centrale_inertielle', anonymous=True)
     rate = rospy.Rate(50) # 10hz
     num_message = 0
     while not rospy.is_shutdown():
-        msg = ShipInfo()
-        msg.altitude = np.random.random()
-        msg.latitude = 42.99247 + np.random.random()*0.1
-        msg.longitude = 5.97839 + np.random.random()*0.1
-        msg.roll = 150.8 + np.random.random()*10
-        msg.tilt = -1.4 + np.random.random()
-        msg.yaw = num_message
-        num_message = (num_message + 1)
-        rospy.loginfo(msg)
-        pub.publish(msg)
-        rate.sleep()
+        # msg = ShipInfo()
+        # msg.altitude = np.random.random()
+        # msg.latitude = 42.99247 + np.random.random()*0.1
+        # msg.longitude = 5.97839 + np.random.random()*0.1
+        # msg.roll = 150.8 + np.random.random()*10
+        # msg.tilt = -1.4 + np.random.random()
+        # msg.yaw = num_message
+        # num_message = (num_message + 1)
+        # rospy.loginfo(msg)
+        # pub.publish(msg)
+        # rate.sleep()
+        # Equivalent to [20,1.5,0.8] rotation
+        rot = R.from_euler(
+            'zyx',
+            [15 + np.random.random()/10, 1 + np.random.random()/10, 0.2 + np.random.random()/10]
+        )
+        x,y,z,w = rot.as_quat()
+        
+        msg_quat = SbgEkfQuat(
+            quaternion = Quaternion(
+                x=x, y=y,z=z,w=w
+                )
+        )
 
+        msg_nav = SbgEkfNav(
+            latitude = 42.52961333333333 + np.random.random()/100,
+            longitude = 5.6977166666666665 + np.random.random()/100,
+            altitude = np.random.random() - 0.5
+        )
+        
+        
+        rospy.loginfo(msg_quat)
+        rospy.loginfo(msg_nav)
+        
+        quat_pub.publish(msg_quat)
+        nav_pub.publish(msg_nav)
+        
+        rate.sleep()
 if __name__ == '__main__':
     try:
         talker()
