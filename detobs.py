@@ -38,7 +38,6 @@
 
 import rospy
 from yolo_ros.msg import ContactsList
-from sbg_driver.msg import SbgEkfQuat
 
 def callback(data):
     # rospy.loginfo(str(dir(data)))

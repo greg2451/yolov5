@@ -72,7 +72,7 @@ class Projecteur:
 			boat_quaternion (array): Le quaternion représentant les coordonnées angulaires du bateau.
 		"""
 		
-		self.boat_orientation = R.from_quat(QuatMsg.quaternion)
+		self.boat_orientation = R.from_quat([getattr(QuatMsg.quaternion,attr) for attr in ['x','y','z','w']])
 		self.camera_orientation = self.camera_orientation_initial * self.boat_orientation 
 		self.boat_position = NavMsg
 
