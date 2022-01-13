@@ -1,4 +1,4 @@
-#!/home/seaowl-jetson/Documents/det3.6/bin
+#!/home/seaowl-jetson/Documents/det3.6/bin/python
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2008, Willow Garage, Inc.
