@@ -134,8 +134,8 @@ class Projecteur:
 		
 		# Déduction des coordonnées GPS de la cible.
 		lat_target, lon_target = new_point_offset(
-			self.boat_position.lat,
-			self.boat_position.lon,
+			self.boat_position.latitude,
+			self.boat_position.longitude,
 			azimuth,
 			distance,
 		)

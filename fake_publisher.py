@@ -63,9 +63,13 @@ def talker():
         # pub.publish(msg)
         # rate.sleep()
         # Equivalent to [20,1.5,0.8] rotation
+        # rot = R.from_euler(
+        #     'zyx',
+        #     [15 + np.random.random()/10, 1 + np.random.random()/10, 0.2 + np.random.random()/10]
+        # )
         rot = R.from_euler(
             'zyx',
-            [15 + np.random.random()/10, 1 + np.random.random()/10, 0.2 + np.random.random()/10]
+            [15, -1, 0]
         )
         x,y,z,w = rot.as_quat()
         

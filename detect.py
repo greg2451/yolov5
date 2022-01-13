@@ -155,6 +155,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         fps = 30
         
     QuatMsg = SbgEkfQuat()
+    QuatMsg.quaternion.x = 1
     NavMsg = SbgEkfNav()
     # Define the callback function when receiving CI data.
     def callback_nav(data):
