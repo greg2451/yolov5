@@ -1,4 +1,4 @@
-#!/home/grego/Documents/envs/cv_inference/bin/python
+#!/home/seaowl-jetson/Documents/det3.6/bin/python
 
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
 """
