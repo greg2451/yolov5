@@ -1,4 +1,5 @@
 from math import prod
+from re import A
 from matplotlib.pyplot import plot
 
 from scipy.misc import central_diff_weights
@@ -159,76 +160,84 @@ class Projecteur:
 		else :
 			return lat_target, lon_target, (target_width, target_height), distance, elevation, azimuth
 
-def plot_projection_results():
+def plot_projection_results(boat_rotation = [0,0,15]):
     
-    from itertools import product
-    from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
-    import seaborn as sns
-    import numpy as npsns
-    from tqdm import tqdm
-    import numpy as np
-    import matplotlib.pyplot as plt
-    
-    projecteur = Projecteur()
-    quaternion = R.from_euler('zyx', [0,0,15], degrees=True)
-    quat_dict = dict(zip([*'xyzw'],quaternion.as_quat()))
-	
-    QuatMsg = SbgEkfQuat()
-    [setattr(QuatMsg.quaternion, key, value) for key,value in quat_dict.items()]
-    NavMsg = SbgEkfNav()
-    
-    projecteur.update(QuatMsg, NavMsg)
-    
-    XYWH = np.array([[((x-640), (y-360), 0, 0) for x in range(1,1281)] for y in range(1,721)])
-    
-    X = XYWH[:,:,0]
-    Y = XYWH[:,:,1]
-    
-    yaw, pitch, roll = projecteur.camera_orientation[0].as_euler('zyx')
-    print(projecteur.camera_orientation[0].as_euler('zyx',degrees=True))
-    
-    roll_rotation_matrix = array(
-        ((cos(roll), sin(roll)),
-        (-sin(roll),  cos(roll)) )
-    )
+	from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
+	import seaborn as sns
+	from tqdm import tqdm
+	import numpy as np
+	import matplotlib.pyplot as plt
+
+	projecteur = Projecteur()
+	quaternion = R.from_euler('zyx', boat_rotation, degrees=True)
+	quat_dict = dict(zip([*'xyzw'],quaternion.as_quat()))
+
+	QuatMsg = SbgEkfQuat()
+	_ = [setattr(QuatMsg.quaternion, key, value) for key,value in quat_dict.items()]
+	NavMsg = SbgEkfNav()
+
+	projecteur.update(QuatMsg, NavMsg)
+
+	XYWH = np.array([[((x-640), (y-360), 0, 0) for x in range(1,1281)] for y in range(1,721)])
+
+	X = XYWH[:,:,0]
+	Y = XYWH[:,:,1]
+
+	yaw, pitch, roll = projecteur.camera_orientation[0].as_euler('zyx')
+	print(projecteur.camera_orientation[0].as_euler('zyx',degrees=True))
+
+	roll_rotation_matrix = array(
+		((cos(roll), sin(roll)),
+		(-sin(roll),  cos(roll)) )
+	)
 
 	# Application de la rotation de l'écran.
-    
-    azimuth = np.zeros((720,1280))
-    elevation = np.zeros((720,1280))
-    for xywh1 in tqdm(XYWH):
-        for xywh in xywh1:
-            x_i,y_i,w,h = xywh
-            x,y =roll_rotation_matrix @ array(((x_i,y_i)))
-            ri2 = x**2 + y**2 
-            ri = sqrt(ri2)
-            rf = ri - projecteur.b*ri2 + 2*(projecteur.b**2)*ri*ri2 + (-projecteur.c - 5*projecteur.b**3)*ri2**2 	
-            azimuth[y_i+359,x_i+639] = np.degrees(np.arctan(x*(rf/(ri + 10e-6))/projecteur.f) + yaw)
-            elevation[y_i+359,x_i+639] = np.degrees(np.arctan(-y*(rf/(ri + 10e-6))/projecteur.f) + pitch)
 
-    # ax = sns.heatmap(azimuth, center = 0)
-    # ax = sns.heatmap(elevation, center = 0)
-    fig = plt.figure(figsize=plt.figaspect(0.5))
-    # fig = plt.figure()
-    ax = fig.add_subplot(1, 2, 1, projection='3d')
-    # ax = plt.axes(projection='3d')
-    az = ax.plot_surface(X, Y, azimuth, rstride=20, cstride=20, cmap='viridis')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('Azimuth (degrés)')
-    ax.set_title('Azimuth vs coordonnées des pixels')
-    ax.axis()
-    fig.colorbar(az, shrink=0.5, aspect=10)
-    
-    ax = fig.add_subplot(1, 2, 2, projection='3d')
-    el = ax.plot_surface(X, Y, elevation, rstride=20, cstride=20, cmap='plasma')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('Élévation (degrés)')
-    ax.set_title('Élévation vs coordonnées des pixels')
-    fig.colorbar(el, shrink=0.5, aspect=10)
-    
-    plt.show()
+	azimuth = np.zeros((720,1280))
+	elevation = np.zeros((720,1280))
+	for xywh1 in tqdm(XYWH):
+		for xywh in xywh1:
+			x_i,y_i,w,h = xywh
+			x,y =roll_rotation_matrix @ array(((x_i,y_i)))
+			ri2 = x**2 + y**2 
+			ri = sqrt(ri2)
+			rf = ri - projecteur.b*ri2 + 2*(projecteur.b**2)*ri*ri2 + (-projecteur.c - 5*projecteur.b**3)*ri2**2 	
+			azimuth[y_i+359,x_i+639] = np.degrees(np.arctan(x*(rf/(ri + 10e-6))/projecteur.f) + yaw)
+			elevation[y_i+359,x_i+639] = np.degrees(np.arctan(-y*(rf/(ri + 10e-6))/projecteur.f) + pitch)
+
+	fig = plt.figure(figsize=plt.figaspect(9/16))
+	fig.suptitle(f"Projection espace des pixels vers angles de relèvement avec l'angle de rotation (zyx) : {projecteur.camera_orientation[0].as_euler('zyx',degrees=True)}")
+
+	ax = fig.add_subplot(2, 2, 1, projection='3d')
+	# ax = plt.axes(projection='3d')
+	az = ax.plot_surface(X, Y, azimuth, rstride=20, cstride=20, cmap='viridis')
+	ax.set_xlabel('x')
+	ax.set_ylabel('y')
+	ax.set_zlabel('Azimuth (degrés)')
+	ax.set_title('Azimuth vs coordonnées des pixels')
+	ax.axis()
+	fig.colorbar(az, shrink=0.5, aspect=10)
+
+	ax = fig.add_subplot(2, 2, 3, projection='3d')
+	el = ax.plot_surface(X, Y, elevation, rstride=20, cstride=20, cmap='plasma')
+	ax.set_xlabel('x')
+	ax.set_ylabel('y')
+	ax.set_zlabel('Élévation (degrés)')
+	ax.set_title('Élévation vs coordonnées des pixels')
+	fig.colorbar(el, shrink=0.5, aspect=10)
+
+	ax = fig.add_subplot(2,2, 2)
+	sns.heatmap(azimuth, ax=ax, cmap='viridis')
+	ax.set_xlabel('x')
+	ax.set_ylabel('y')
+
+	ax = fig.add_subplot(2, 2, 4)
+	sns.heatmap(elevation, ax=ax, cmap='plasma')
+	ax.set_xlabel('x')
+	ax.set_ylabel('y')
+
+
+	plt.show()
 
 if __name__ == '__main__':
-	plot_projection_results()
+	plot_projection_results([90,0.2,2])
