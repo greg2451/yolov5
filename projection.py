@@ -1,8 +1,3 @@
-from math import prod
-from re import A
-from matplotlib.pyplot import plot
-
-from scipy.misc import central_diff_weights
 from yolo_ros.msg import ContactsList
 from scipy.spatial.transform import Rotation as R
 from numpy import sqrt, degrees, arctan, array, cos, sin, tan, radians
@@ -240,4 +235,4 @@ def plot_projection_results(boat_rotation = [0,0,15]):
 	plt.show()
 
 if __name__ == '__main__':
-	plot_projection_results([90,0.2,2])
+	plot_projection_results([90,15,4])
