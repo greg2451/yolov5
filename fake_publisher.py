@@ -37,7 +37,6 @@
 ## to the 'chatter' topic
 
 import rospy
-from yolo_ros.msg import ShipInfo
 from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
 from scipy.spatial.transform import Rotation as R
 from geometry_msgs.msg import Quaternion
@@ -49,7 +48,6 @@ def talker():
     nav_pub = rospy.Publisher('Nav', SbgEkfNav)
     rospy.init_node('Centrale_inertielle', anonymous=True)
     rate = rospy.Rate(50) # 10hz
-    num_message = 0
     while not rospy.is_shutdown():
         # msg = ShipInfo()
         # msg.altitude = np.random.random()
