@@ -17,20 +17,15 @@
 """
 from __future__ import print_function
 
-#from numba import jit
+# from numba import jit
 import os.path
 import numpy as np
-##import matplotlib.pyplot as plt
-##import matplotlib.patches as patches
-from skimage import io
-#from sklearn.utils.linear_assignment_ import linear_assignment
 from scipy.optimize import linear_sum_assignment as linear_assignment
-import glob
 import time
 import argparse
 from filterpy.kalman import KalmanFilter
 
-#@jit
+# @jit
 def iou(bb_test,bb_gt):
   """
   Computes IUO between two bboxes in the form [x1,y1,x2,y2]
@@ -102,6 +97,8 @@ class KalmanBoxTracker(object):
     self.hit_streak = 0
     self.age = 0
     self.objclass = bbox[5]
+    self.vx = 0
+    self.vy = 0
 
   def update(self,bbox):
     """
@@ -110,8 +107,10 @@ class KalmanBoxTracker(object):
     self.time_since_update = 0
     self.history = []
     self.hits += 1
-    self.hit_streak += 1      
+    self.hit_streak += 1     
     self.kf.update(convert_bbox_to_z(bbox))
+    self.vx = self.kf.x[4]/30 + 29/30 * self.vx
+    self.vy = self.kf.x[5]/30 + 29/30 * self.vy
 
   def predict(self):
     """
@@ -241,6 +240,9 @@ def parse_args():
 
 if __name__ == '__main__':
   # all train
+  from skimage import io
+  import matplotlib.pyplot as plt
+  import matplotlib.patches as patches
   sequences = ['PETS09-S2L1','TUD-Campus','TUD-Stadtmitte','ETH-Bahnhof','ETH-Sunnyday','ETH-Pedcross2','KITTI-13','KITTI-17','ADL-Rundle-6','ADL-Rundle-8','Venice-2']
   args = parse_args()
   display = args.display
