@@ -382,7 +382,7 @@ def parse_opt():
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
     
     # ROS args
-    parser.add_argument('--rt', action='store_true', help="don't use kalman filtering")
+    parser.add_argument('--rt', action='store_true', help="play the video in real-time, meaning that it might skip frames")
     
     # IPD args    
     parser.add_argument('--reticle', action='store_true', help='show center of screen.')
