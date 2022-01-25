@@ -1,4 +1,4 @@
-#!python
+#!/home/grego/Documents/envs/cv_inference/bin/python
 
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
 """
@@ -402,8 +402,8 @@ if __name__ == "__main__":
     opt = parse_opt()
     # We set the following default values:
     opt.view_img = True
-    opt.source = "ShipSpotting1.mp4"
-    opt.weights = 'gds.pt'
+    opt.source = "~/catkin_ws/src/inspear-vision-node/ShipSpotting1.mp4"
+    opt.weights = '~/catkin_ws/src/inspear-vision-node/gdn.pt'
     opt.nosave = True
     opt.rt = True
     main(opt)
