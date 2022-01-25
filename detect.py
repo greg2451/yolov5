@@ -1,4 +1,4 @@
-#!/home/seaowl-jetson/Documents/det3.6/bin/python
+#!python
 
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
 """
@@ -400,9 +400,10 @@ def main(opt):
 
 if __name__ == "__main__":
     opt = parse_opt()
+    # We set the following default values:
     opt.view_img = True
-    opt.source = "/home/grego/Documents/data/ShipSpotting1.mp4"
-    opt.weights = '/home/grego/Documents/yolov5old/gdn.engine'
+    opt.source = "ShipSpotting1.mp4"
+    opt.weights = 'gds.pt'
     opt.nosave = True
     opt.rt = True
     main(opt)
