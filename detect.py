@@ -402,8 +402,8 @@ if __name__ == "__main__":
     opt = parse_opt()
     # We set the following default values:
     opt.view_img = True
-    opt.source = "~/catkin_ws/src/inspear-vision-node/ShipSpotting1.mp4"
-    opt.weights = '~/catkin_ws/src/inspear-vision-node/gdn.pt'
+    opt.source = ROOT/"ShipSpotting1.mp4"
+    opt.weights = ROOT/'gdn.pt'
     opt.nosave = True
     opt.rt = True
     main(opt)
