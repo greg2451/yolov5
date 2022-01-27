@@ -102,6 +102,10 @@ class KalmanBoxTracker(object):
     self.hit_streak = 0
     self.age = 0
     self.objclass = bbox[5]
+    self.xm = 0
+    self.ym = 0
+    self.vx = 0
+    self.vy = 0
 
   def update(self,bbox):
     """
@@ -110,8 +114,12 @@ class KalmanBoxTracker(object):
     self.time_since_update = 0
     self.history = []
     self.hits += 1
-    self.hit_streak += 1      
+    self.hit_streak += 1
     self.kf.update(convert_bbox_to_z(bbox))
+    # self.vx.append(self.kf.x[4])
+    # self.vy.append(self.kf.x[5])
+    self.vx = self.kf.x[4]/30 + 29/30 * self.vx
+    self.vy = self.kf.x[5]/30 + 29/30 * self.vy
 
   def predict(self):
     """

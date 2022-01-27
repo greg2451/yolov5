@@ -37,6 +37,7 @@ from utils.torch_utils import select_device, time_sync
 # For kalman tracking
 import track.sort  
 import time
+from numpy import mean
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -118,7 +119,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         fps = 25 # Adjusting fps
     
     # Get model name TODO
-    model_name = weights[0].replace('.\\','').replace('.pt','')
+    # model_name = weights[0].replace('.\\','').replace('.pt','')
     
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
@@ -218,8 +219,23 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
                     if save_img or save_crop or view_img:  # Add bbox to image
                         if not no_kalman:
-                            c = int(obj_id)
-                            label = None if hide_labels else (str(c) if hide_conf else f'{c} {conf:.3f}')
+                            # x = mot_tracker.trackers[int(obj_id-1)].kf.x
+                            trk = next((x for x in mot_tracker.trackers if x.id == int(obj_id-1)))
+                            if trk.hits <= 60 :
+                                label = 'Not enough points'
+                            else :
+                                # vy = mean(trk.vy[-60:])
+                                # vx = mean(trk.vx[-60:])
+                                vy = trk.vy[0]
+                                vx = trk.vx[0]
+                                y = trk.ym[0]
+                                x = trk.xm[0]
+                                c = int(obj_id)
+                                # label = None if hide_labels else (str(c) if hide_conf else f'{c} {conf:.3f}')
+                                # label = f'vx:{vx:.2f} vy:{vy:.2f}'
+                                label = f'x:{x:.2f} y:{y:.2f}'
+                                # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                                # label = f'x:{xywh[0]*640:.2f} y:{xywh[1]*360:.2f}'
                         else:
                             c = int(cls)  # integer class
                             label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
