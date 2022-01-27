@@ -1,0 +1,6 @@
+# Fake config file, will not work to train but is used to give class names for TensorRT engines.
+
+# Classes
+nc: 1  # number of classes
+names: ['boat']  # class names
+                 
