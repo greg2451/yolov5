@@ -146,7 +146,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # model_name = weights[0].replace('.\\','').replace('.pt','')
     
     # Run inference
-    model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
+    model.warmup(imgsz=(bs, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
     
     if rt:
