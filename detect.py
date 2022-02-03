@@ -297,9 +297,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 xyxy = [0.5*w + size, 0.5*h + size,0.5*w - size,0.5*h - size]
                 annotator.box_label(xyxy, None, color=(0,20,153))
 
-            # Print time (inference-only)
-            LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -324,7 +321,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             save_path += '.mp4'
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
-            
+
+        # Print time (inference-only)
+        LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+
         rate.sleep()
         
         

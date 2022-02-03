@@ -1,6 +1,6 @@
 from yolo_ros.msg import ContactsList
 from scipy.spatial.transform import Rotation as R
-from numpy import sqrt, degrees, arctan, array, cos, sin, tan, radians
+from numpy import sqrt, degrees, arctan, array, cos, sin, tan, radians, pi
 
 
 def new_point_offset(lat, lon, azimuth, distance):
@@ -32,8 +32,11 @@ class Projecteur:
         b=-0.00022355714835994704,
         c=-9.927438097191326e-11,
         screen_dim=[1280, 720],
-        camera_orientation=[[60 * i, -22.4, 0] for i in range(6)],
+        camera_orientation=[[-60 * i, 22.4, 0] for i in range(6)],
+        # Pour NED, camera_orientation = [[60 * i, -22.4, 0] for i in range(6)]
+        # Plus généralement il suffit d'opposer les signes de yaw et pitch.
         camera_height=1.8,
+        ENU=True,
     ):
         """
         f : Focale de la lentille (= distance lentille-écran dans le pin-hole model, à régler par l'expérience)
@@ -51,7 +54,6 @@ class Projecteur:
             "zyx",
             camera_orientation,
             degrees=True,
-            # NED conventions
         )
 
         # Initialization.
@@ -60,6 +62,8 @@ class Projecteur:
             [0, 0, 0],
             degrees=True,
         )
+
+        self.ENU = ENU
 
     def update(
         self,
@@ -106,17 +110,19 @@ class Projecteur:
 
         # Calcul de conversion pixel vers angle.
         def pixel2angle(pixel):
-            return arctan(pixel * (rf / (ri + 10e-9)) / self.f)
+            angle_to_center = arctan(pixel * (rf / (ri + 10e-9)) / self.f)
 
-        # Relèvement du point le plus bas de la détection
-        elevation = pixel2angle(y - h / 2) + pitch  # Eventuellement rajouter un - par orientation.
-        azimuth = pixel2angle(x) + yaw
+            # FOR ENU and NED, yaw and pitch are oriented in the other way round.
+            return (-angle_to_center) if self.ENU else angle_to_center
+
+        # Relèvement du point le plus bas de la détection et reconversion en NED
+        elevation = -(pixel2angle(y - h / 2) + pitch) if self.ENU else pixel2angle(y - h / 2) + pitch
+        azimuth = pi / 2 - (pixel2angle(x) + yaw) if self.ENU else pixel2angle(x) + yaw
 
         # Calcul de la largeur et hauteur angulaire de la cible.
-        angular_width = pixel2angle(x + w / 2) - pixel2angle(x - w / 2)
-        angular_height = pixel2angle(y + h / 2) - pixel2angle(
-            y - h / 2
-        )  # Convention OpenCV, (0,0) est le coin supérieur gauche.
+        angular_width = abs(pixel2angle(x + w / 2) - pixel2angle(x - w / 2))
+        angular_height = abs(pixel2angle(y + h / 2) - pixel2angle(y - h / 2))
+        # Convention OpenCV, (0,0) est le coin supérieur gauche.
 
         # Calcul de la distance en considérant son altitude nulle (dépendance extrêmement sensible en l'élévation).
         distance = (self.camera_height - self.boat_position.altitude) / tan(elevation)
@@ -149,7 +155,7 @@ class Projecteur:
             return lat_target, lon_target, (target_width, target_height), distance, elevation, azimuth
 
 
-def plot_projection_results(boat_rotation=[0, 0, 15]):
+def plot_projection_results(boat_rotation=[0, 0, 15], ENU=True):
 
     from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
     import seaborn as sns
@@ -167,7 +173,7 @@ def plot_projection_results(boat_rotation=[0, 0, 15]):
 
     projecteur.update(QuatMsg, NavMsg)
 
-    XYWH = np.array([[((x - 640), (y - 360), 0, 0) for x in range(1, 1281)] for y in range(1, 721)])
+    XYWH = np.array([[((x - 640), (360 - y), 0, 0) for x in range(1, 1281)] for y in range(1, 721)])
 
     X = XYWH[:, :, 0]
     Y = XYWH[:, :, 1]
@@ -193,12 +199,19 @@ def plot_projection_results(boat_rotation=[0, 0, 15]):
                 + 2 * (projecteur.b ** 2) * ri * ri2
                 + (-projecteur.c - 5 * projecteur.b ** 3) * ri2 ** 2
             )
-            azimuth[y_i + 359, x_i + 639] = np.degrees(
-                np.arctan(x * (rf / (ri + 10e-6)) / projecteur.f) + yaw
+            offset_x = (
+                -arctan(x * (rf / (ri + 10e-6)) / projecteur.f)
+                if ENU
+                else arctan(x * (rf / (ri + 10e-6)) / projecteur.f)
             )
-            elevation[y_i + 359, x_i + 639] = np.degrees(
-                np.arctan(-y * (rf / (ri + 10e-6)) / projecteur.f) + pitch
+            offset_y = (
+                -arctan(y * (rf / (ri + 10e-6)) / projecteur.f)
+                if ENU
+                else arctan(y * (rf / (ri + 10e-6)) / projecteur.f)
             )
+
+            azimuth[359 - y_i, x_i + 639] = np.degrees(offset_x + yaw)
+            elevation[359 - y_i, x_i + 639] = np.degrees(offset_y + pitch)
 
     fig = plt.figure(figsize=plt.figaspect(9 / 16))
     fig.suptitle(

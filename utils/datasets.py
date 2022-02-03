@@ -279,10 +279,14 @@ class LoadWebcam:  # for inference
     def __len__(self):
         return 0
 
+# # EXPERIMENTATION TO READ FROM RTSP AND REDUCE LATENCY
+# import os
+# os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
+
 
 class LoadStreams:
     # YOLOv5 streamloader, i.e. `python detect.py --source 'rtsp://example.com/media.mp4'  # RTSP, RTMP, HTTP streams`
-    def __init__(self, sources='streams.txt', img_size=640, stride=32, auto=True):
+    def __init__(self, sources='streams.txt', img_size=640, stride=32, auto=True, real_time=True):
         self.mode = 'stream'
         self.img_size = img_size
         self.stride = stride
@@ -306,6 +310,9 @@ class LoadStreams:
                 s = pafy.new(s).getbest(preftype="mp4").url  # YouTube URL
             s = eval(s) if s.isnumeric() else s  # i.e. s = '0' local webcam
             cap = cv2.VideoCapture(s)
+            if real_time:
+                # Deactivate buffer to minimize latency
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 0)
             assert cap.isOpened(), f'{st}Failed to open {s}'
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -328,7 +335,9 @@ class LoadStreams:
     def update(self, i, cap, stream):
         # Read stream `i` frames in daemon thread
         n, f, read = 0, self.frames[i], 1  # frame number, frame array, inference every 'read' frame
+        frame_interval= 1 / self.fps[i] # Storing frame duration in seconds
         while cap.isOpened() and n < f:
+            init_time = time.time()
             n += 1
             # _, self.imgs[index] = cap.read()
             cap.grab()
@@ -340,7 +349,8 @@ class LoadStreams:
                     LOGGER.warning('WARNING: Video stream unresponsive, please check your IP camera connection.')
                     self.imgs[i] = np.zeros_like(self.imgs[i])
                     cap.open(stream)  # re-open stream if signal was lost
-            time.sleep(1 / self.fps[i])  # wait time
+            total_duration = time.time() - init_time
+            time.sleep(max(0, (frame_interval - total_duration)))  # wait time
 
     def __iter__(self):
         self.count = -1
