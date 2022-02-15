@@ -49,11 +49,21 @@ def git_describe(path=Path(__file__).parent):  # path must be a directory
     s = f'git -C {path} describe --tags --long --always'
     try:
         return subprocess.check_output(s, shell=True, stderr=subprocess.STDOUT).decode()[:-1]
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         return ''  # not a git repository
 
 
-def select_device(device='', batch_size=None, newline=True):
+def device_count():
+    # Returns number of CUDA devices available. Safe version of torch.cuda.device_count(). Only works on Linux.
+    assert platform.system() == 'Linux', 'device_count() function only works on Linux'
+    try:
+        cmd = 'nvidia-smi -L | wc -l'
+        return int(subprocess.run(cmd, shell=True, capture_output=True, check=True).stdout.decode().split()[-1])
+    except Exception:
+        return 0
+
+
+def select_device(device='', batch_size=0, newline=True):
     # device = 'cpu' or '0' or '0,1,2,3'
     s = f'YOLOv5 🚀 {git_describe() or date_modified()} torch {torch.__version__} '  # string
     device = str(device).strip().lower().replace('cuda:', '')  # to string, 'cuda:0' to '0'
@@ -61,14 +71,15 @@ def select_device(device='', batch_size=None, newline=True):
     if cpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # force torch.cuda.is_available() = False
     elif device:  # non-cpu device requested
-        os.environ['CUDA_VISIBLE_DEVICES'] = device  # set environment variable
-        assert torch.cuda.is_available(), f'CUDA unavailable, invalid device {device} requested'  # check availability
+        os.environ['CUDA_VISIBLE_DEVICES'] = device  # set environment variable - must be before assert is_available()
+        assert torch.cuda.is_available() and torch.cuda.device_count() >= len(device.replace(',', '')), \
+            f"Invalid CUDA '--device {device}' requested, use '--device cpu' or pass valid CUDA device(s)"
 
     cuda = not cpu and torch.cuda.is_available()
     if cuda:
         devices = device.split(',') if device else '0'  # range(torch.cuda.device_count())  # i.e. 0,1,6,7
         n = len(devices)  # device count
-        if n > 1 and batch_size:  # check batch_size is divisible by device_count
+        if n > 1 and batch_size > 0:  # check batch_size is divisible by device_count
             assert batch_size % n == 0, f'batch-size {batch_size} not multiple of GPU count {n}'
         space = ' ' * (len(s) + 1)
         for i, d in enumerate(devices):
@@ -113,7 +124,7 @@ def profile(input, ops, n=10, device=None):
             tf, tb, t = 0, 0, [0, 0, 0]  # dt forward, backward
             try:
                 flops = thop.profile(m, inputs=(x,), verbose=False)[0] / 1E9 * 2  # GFLOPs
-            except:
+            except Exception:
                 flops = 0
 
             try:
@@ -124,7 +135,7 @@ def profile(input, ops, n=10, device=None):
                     try:
                         _ = (sum(yi.sum() for yi in y) if isinstance(y, list) else y).sum().backward()
                         t[2] = time_sync()
-                    except Exception as e:  # no backward method
+                    except Exception:  # no backward method
                         # print(e)  # for debug
                         t[2] = float('nan')
                     tf += (t[1] - t[0]) * 1000 / n  # ms per op forward
@@ -293,7 +304,7 @@ class ModelEMA:
 
     def __init__(self, model, decay=0.9999, updates=0):
         # Create EMA
-        self.ema = deepcopy(model.module if is_parallel(model) else model).eval()  # FP32 EMA
+        self.ema = deepcopy(de_parallel(model)).eval()  # FP32 EMA
         # if next(model.parameters()).device.type != 'cpu':
         #     self.ema.half()  # FP16 EMA
         self.updates = updates  # number of EMA updates
@@ -307,7 +318,7 @@ class ModelEMA:
             self.updates += 1
             d = self.decay(self.updates)
 
-            msd = model.module.state_dict() if is_parallel(model) else model.state_dict()  # model state_dict
+            msd = de_parallel(model).state_dict()  # model state_dict
             for k, v in self.ema.state_dict().items():
                 if v.dtype.is_floating_point:
                     v *= d
