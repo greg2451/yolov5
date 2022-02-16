@@ -93,9 +93,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         no_kalman=False, # use kalman filtering
         min_hits=5, # parameter for kalman filter
         max_age=1, # parameter of duration
-        save_kalman=False,
-        reticle=False,
-        rt=False,
         ):
     
     source = str(source)
@@ -116,9 +113,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     stride, names, pt, jit, onnx, engine = model.stride, model.names, model.pt, model.jit, model.onnx, model.engine
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
-    # Initialize Kalman filtering.  
-    if not no_kalman :
-        mot_tracker = track.sort.Sort(min_hits=min_hits, max_age=max_age)
     
     # Initialize ROS node
     rospy.init_node('VisionTrackProducer', anonymous=True)    
@@ -140,19 +134,13 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         bs = 1  # batch_size
     vid_path, vid_writer = [None] * bs, [None] * bs
 
-
-    # To prevent an error if no videos
-    dataset.frame = 0
-    # model_name = weights[0].replace('.\\','').replace('.pt','')
+    # Initialize Kalman filtering.  
+    if not no_kalman :
+        object_trackers = [track.sort.Sort(min_hits=min_hits, max_age=max_age) for _ in range(bs)]
     
     # Run inference
     model.warmup(imgsz=(bs, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
-    
-    if rt:
-        skip_frames = 0
-        time_delta = 0
-        fps = 30
         
     QuatMsg = SbgEkfQuat()
     QuatMsg.quaternion.x = 1
@@ -171,12 +159,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     rate = rospy.Rate(10)
     projecteur = Projecteur()
     for path, im, im0s, vid_cap, s in dataset:
-        if rt:
-            if skip_frames > 0:
-                skip_frames -= 1
-                continue
-            else :
-                time.sleep(time_delta)
         
         # Update proj with current values.
         projecteur.update(
@@ -185,15 +167,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         )
         
         t1 = time_sync()
-        if (not no_kalman) & (dataset.frame == 1) :
-            del mot_tracker
-            track.sort.KalmanBoxTracker.count = 0
-            mot_tracker = track.sort.Sort(min_hits=min_hits, max_age=max_age)
-            if save_kalman:
-                save_kalman_path = '.'.join(dataset.files[dataset.count].split('.')[:-1]) + f'_{model_name}' +'.csv'
-                line = ('frame', 'obj_id','detect_score', 'xtl','ytl','xbr','ybr')
-                with open(save_kalman_path, 'w') as f:
-                    f.write(('%s,' * len(line)).rstrip()[:-1] % line + '\n')
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -241,7 +214,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 if not no_kalman :
-                    tracked_objects = mot_tracker.update(reversed(det).cpu())
+                    tracked_objects = object_trackers[i].update(reversed(det).cpu())
                     detection_number = 0
                     confs = det[:,4]
                     dt[2] += time_sync() - t3
@@ -255,26 +228,19 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         obj_id = conf
                         conf = confs[detection_number]
                         detection_number += 1
-
-                    if True:           # Format and send the message !
+                    # Format and send the message!
+                    if True: 
                         camera_id = i # Not this generally but will depend which camera we use simutaneously.
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        out_msg = projecteur(xywh, camera_id, obj_id, rosmsg=True)
+                        unique_obj_id = 6 * obj_id + i # Camera i will only output objects with id congruent to i modulo 6
+                        out_msg = projecteur(xywh, camera_id, unique_obj_id, rosmsg=True)
                         publisher.publish(out_msg)
                     
-                    if save_txt & (not save_kalman):  # Write to file
+                    if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                    if (not no_kalman) & save_kalman :
-                        # save_path = dataset.files[dataset.count].split(os.sep)[-1].split('.')[0]
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        rounding = lambda x : round(x,4)
-                        line = (dataset.frame, int(obj_id), conf,*[rounding(el) for el in xywh])
-                        with open(save_kalman_path, 'a') as f:
-                            f.write(('%g,' * len(line)).rstrip()[:-1] % line + '\n')
 
                     if save_img or save_crop or view_img:  # Add bbox to image
                         if not no_kalman:
@@ -286,16 +252,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)          
-            
-            # Add the middle rectangle to visualize the center.
-            if reticle:
-                h,w,_ = im0.shape
-                size = 0.02*h
-                xyxy = [0.5*w + size, 0.5*h + size,0.5*w - size,0.5*h - size]
-                annotator.box_label(xyxy, None, color=(0,153,255))
-                size = 0.003*h
-                xyxy = [0.5*w + size, 0.5*h + size,0.5*w - size,0.5*h - size]
-                annotator.box_label(xyxy, None, color=(0,20,153))
 
             # Stream results
             im0 = annotator.result()
@@ -324,17 +280,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-
-        rate.sleep()
-        
-        
-        if rt:
-            t_end = time_sync()
-            if dataset.mode != 'image':
-                
-                # Compute number of frames to skip in order to be real time.
-                skip_frames = int(fps * (t_end - t1))
-                time_delta = (fps * (t_end - t1) - skip_frames)/fps
             
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
@@ -381,12 +326,6 @@ def parse_opt():
     parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
     
-    # ROS args
-    parser.add_argument('--rt', action='store_true', help="play the video in real-time, meaning that it might skip frames")
-    
-    # IPD args    
-    parser.add_argument('--reticle', action='store_true', help='show center of screen.')
-    
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
@@ -404,6 +343,4 @@ if __name__ == "__main__":
     opt.view_img = True
     opt.source = ROOT/"ShipSpotting1.mp4"
     opt.weights = ROOT/'gdn.pt'
-    opt.nosave = True
-    opt.rt = True
     main(opt)
