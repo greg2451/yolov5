@@ -1,1 +1,1 @@
-rtsp://192.168.1.26/axis-media/media.amp
+rtsp://192.168.2.26/axis-media/media.amp
