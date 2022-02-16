@@ -293,8 +293,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
-    parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--weights', nargs='+', type=str, default=ROOT/ 'gdn.pt', help='model path(s)')
+    parser.add_argument('--source', type=str, default=ROOT/ "ShipSpotting1.mp4", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
@@ -321,7 +321,6 @@ def parse_opt():
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     
     # Kalman args
-    parser.add_argument('--save-kalman', action='store_true', help='save labels as a csv file with object tracking')
     parser.add_argument('--no-kalman', action='store_true', help="don't use kalman filtering")
     parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
@@ -339,8 +338,4 @@ def main(opt):
 
 if __name__ == "__main__":
     opt = parse_opt()
-    # We set the following default values:
-    opt.view_img = True
-    opt.source = ROOT/"ShipSpotting1.mp4"
-    opt.weights = ROOT/'gdn.pt'
     main(opt)
