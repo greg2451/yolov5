@@ -55,7 +55,6 @@ import time
 
 # For ROS
 import rospy
-from yolo_ros.msg import ShipInfo
 from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
 from yolo_ros.msg import ContactsList
 from projection import Projecteur
@@ -116,7 +115,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     
     # Initialize ROS node
     rospy.init_node('VisionTrackProducer', anonymous=True)    
-    publisher = rospy.Publisher('vision_detection', ContactsList, queue_size = 10)
+    publisher = rospy.Publisher('/commands/int_targets/optical', ContactsList, queue_size = 10)
     
     # Half
     half &= (pt or jit or onnx or engine) and device.type != 'cpu'  # FP16 supported on limited backends with CUDA
@@ -154,8 +153,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         nonlocal QuatMsg
         QuatMsg = data
 
-    rospy.Subscriber('Quat', SbgEkfQuat, callback_quat, queue_size = 1)    
-    rospy.Subscriber('Nav', SbgEkfNav, callback_nav, queue_size = 1)    
+    rospy.Subscriber('/sbg/ekf_quat', SbgEkfQuat, callback_quat, queue_size = 1)    
+    rospy.Subscriber('/sbg/ekf_nav', SbgEkfNav, callback_nav, queue_size = 1)    
     rate = rospy.Rate(10)
     projecteur = Projecteur()
     for path, im, im0s, vid_cap, s in dataset:
