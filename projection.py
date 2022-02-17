@@ -1,4 +1,4 @@
-from yolo_ros.msg import ContactsList
+from drone_config.msg import ContactUnit
 from scipy.spatial.transform import Rotation as R
 from numpy import sqrt, degrees, arctan, array, cos, sin, tan, radians, pi
 
@@ -140,13 +140,13 @@ class Projecteur:
         )
 
         if rosmsg:
-            message = ContactsList(
+            message = ContactUnit(
                 id=int(obj_id),
                 status=1,
                 latitude=lat_target,
                 longitude=lon_target,
                 speed=0,
-                size=target_height * target_width,
+                size=target_width,
             )
 
             return message

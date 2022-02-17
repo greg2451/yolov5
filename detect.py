@@ -56,7 +56,7 @@ import time
 # For ROS
 import rospy
 from sbg_driver.msg import SbgEkfQuat, SbgEkfNav
-from yolo_ros.msg import ContactsList
+from drone_config.msg import ContactUnit
 from projection import Projecteur
 
 
@@ -115,7 +115,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     
     # Initialize ROS node
     rospy.init_node('VisionTrackProducer', anonymous=True)    
-    publisher = rospy.Publisher('/commands/int_targets/optical', ContactsList, queue_size = 10)
+    publisher = rospy.Publisher('/commands/int_targets/optical', ContactUnit, queue_size = 10)
     
     # Half
     half &= (pt or jit or onnx or engine) and device.type != 'cpu'  # FP16 supported on limited backends with CUDA
