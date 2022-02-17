@@ -294,10 +294,7 @@ class DetectMultiBackend(nn.Module):
 
         super().__init__()
         w = str(weights[0] if isinstance(weights, list) else weights)
-        suffix = Path(w).suffix.lower()
-        suffixes = ['.pt', '.torchscript', '.onnx', '.engine', '.tflite', '.pb', '', '.mlmodel', '.xml']
-        check_suffix(w, suffixes)  # check weights have acceptable suffix
-        pt, jit, onnx, engine, tflite, pb, saved_model, coreml, xml = (suffix == x for x in suffixes)  # backends
+        pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs = self.model_type(w)  # get backend
         stride, names = 64, [f'class{i}' for i in range(1000)]  # assign defaults
         w = attempt_download(w)  # download if not local
         if data:  # data.yaml path (optional)
@@ -332,6 +329,8 @@ class DetectMultiBackend(nn.Module):
             check_requirements(('openvino-dev',))  # requires openvino-dev: https://pypi.org/project/openvino-dev/
             import openvino.inference_engine as ie
             core = ie.IECore()
+            if not Path(w).is_file():  # if not *.xml
+                w = next(Path(w).glob('*.xml'))  # get *.xml file from *_openvino_model dir
             network = core.read_network(model=w, weights=Path(w).with_suffix('.bin'))  # *.xml, *.bin paths
             executable_network = core.load_network(network, device_name='CPU', num_requests=1)
         elif engine:  # TensorRT
@@ -374,17 +373,20 @@ class DetectMultiBackend(nn.Module):
                 graph_def.ParseFromString(open(w, 'rb').read())
                 frozen_func = wrap_frozen_graph(gd=graph_def, inputs="x:0", outputs="Identity:0")
             elif tflite:  # https://www.tensorflow.org/lite/guide/python#install_tensorflow_lite_for_python
-                if 'edgetpu' in w.lower():  # Edge TPU
+                try:  # https://coral.ai/docs/edgetpu/tflite-python/#update-existing-tf-lite-code-for-the-edge-tpu
+                    from tflite_runtime.interpreter import Interpreter, load_delegate
+                except ImportError:
+                    import tensorflow as tf
+                    Interpreter, load_delegate = tf.lite.Interpreter, tf.lite.experimental.load_delegate,
+                if 'edgetpu' in w.lower():  # Edge TPU https://coral.ai/software/#edgetpu-runtime
                     LOGGER.info(f'Loading {w} for TensorFlow Lite Edge TPU inference...')
-                    import tflite_runtime.interpreter as tfli  # install https://coral.ai/software/#edgetpu-runtime
                     delegate = {'Linux': 'libedgetpu.so.1',
                                 'Darwin': 'libedgetpu.1.dylib',
                                 'Windows': 'edgetpu.dll'}[platform.system()]
-                    interpreter = tfli.Interpreter(model_path=w, experimental_delegates=[tfli.load_delegate(delegate)])
+                    interpreter = Interpreter(model_path=w, experimental_delegates=[load_delegate(delegate)])
                 else:  # Lite
                     LOGGER.info(f'Loading {w} for TensorFlow Lite inference...')
-                    import tensorflow as tf
-                    interpreter = tf.lite.Interpreter(model_path=w)  # load TFLite model
+                    interpreter = Interpreter(model_path=w)  # load TFLite model
                 interpreter.allocate_tensors()  # allocate
                 input_details = interpreter.get_input_details()  # inputs
                 output_details = interpreter.get_output_details()  # outputs
@@ -425,7 +427,7 @@ class DetectMultiBackend(nn.Module):
                 conf, cls = y['confidence'].max(1), y['confidence'].argmax(1).astype(np.float)
                 y = np.concatenate((box, conf.reshape(-1, 1), cls.reshape(-1, 1)), 1)
             else:
-                y = y[list(y)[-1]]  # last output
+                y = y[sorted(y)[-1]]  # last output
         else:  # TensorFlow (SavedModel, GraphDef, Lite, Edge TPU)
             im = im.permute(0, 2, 3, 1).cpu().numpy()  # torch BCHW to numpy BHWC shape(1,320,192,3)
             if self.saved_model:  # SavedModel
@@ -444,10 +446,7 @@ class DetectMultiBackend(nn.Module):
                 if int8:
                     scale, zero_point = output['quantization']
                     y = (y.astype(np.float32) - zero_point) * scale  # re-scale
-            y[..., 0] *= w  # x
-            y[..., 1] *= h  # y
-            y[..., 2] *= w  # w
-            y[..., 3] *= h  # h
+            y[..., :4] *= [w, h, w, h]  # xywh normalized to pixels
 
         y = torch.tensor(y) if isinstance(y, np.ndarray) else y
         return (y, []) if val else y
@@ -458,6 +457,18 @@ class DetectMultiBackend(nn.Module):
             if isinstance(self.device, torch.device) and self.device.type != 'cpu':  # only warmup GPU models
                 im = torch.zeros(*imgsz).to(self.device).type(torch.half if half else torch.float)  # input image
                 self.forward(im)  # warmup
+
+    @staticmethod
+    def model_type(p='path/to/model.pt'):
+        # Return model type from model path, i.e. path='path/to/model.onnx' -> type=onnx
+        from export import export_formats
+        suffixes = list(export_formats().Suffix) + ['.xml']  # export suffixes
+        check_suffix(p, suffixes)  # checks
+        p = Path(p).name  # eliminate trailing separators
+        pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, xml2 = (s in p for s in suffixes)
+        xml |= xml2  # *_openvino_model or *.xml
+        tflite &= not edgetpu  # *.tflite
+        return pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs
 
 
 class AutoShape(nn.Module):
