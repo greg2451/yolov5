@@ -139,7 +139,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         object_trackers = [track.sort.Sort(min_hits=min_hits, max_age=max_age) for _ in range(bs)]
     
     # Run inference
-    model.warmup(imgsz=(bs, 3, *imgsz), half=half)  # warmup
+    model.warmup(imgsz=(1 if pt else bs, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
         
     QuatMsg = SbgEkfQuat()
@@ -251,7 +251,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
-                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)          
+                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
             # Stream results
             im0 = annotator.result()
@@ -274,13 +274,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
+                        save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-            
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
