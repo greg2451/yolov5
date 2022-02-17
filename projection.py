@@ -82,7 +82,7 @@ class Projecteur:
         self.camera_orientation = self.camera_orientation_initial * self.boat_orientation
         self.boat_position = NavMsg
 
-    def __call__(self, xywh, camera_id, obj_id, rosmsg=False):
+    def __call__(self, xywh, camera_id, obj_id, rostime, rosmsg=False,):
         """
         Etant donné les coordonnées d'un point en convention OpenCV, renvoie le gisement de ce point (en degrés) et la position de ce point.
         """

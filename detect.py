@@ -165,6 +165,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             NavMsg=NavMsg,
         )
         
+        rostime_now = rospy.get_rostime()
+        
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -232,7 +234,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         camera_id = i # Not this generally but will depend which camera we use simutaneously.
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         unique_obj_id = 6 * obj_id + i # Camera i will only output objects with id congruent to i modulo 6
-                        out_msg = projecteur(xywh, camera_id, unique_obj_id, rosmsg=True)
+                        out_msg = projecteur(xywh, camera_id, unique_obj_id, rostime_now, rosmsg=True)
                         publisher.publish(out_msg)
                     
                     if save_txt:  # Write to file
