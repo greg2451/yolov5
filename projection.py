@@ -1,3 +1,4 @@
+from cv2 import distanceTransform
 from drone_config.msg import ContactUnit
 from scipy.spatial.transform import Rotation as R
 from numpy import sqrt, degrees, arctan, array, cos, sin, tan, radians, pi
@@ -146,7 +147,7 @@ class Projecteur:
                 latitude=lat_target,
                 refresh=rostime,
                 longitude=lon_target,
-                speed=0,
+                speed=distance,
                 size=target_width,
             )
 

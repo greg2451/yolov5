@@ -95,7 +95,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         ):
     
     source = str(source)
-    save_img = not nosave and not source.endswith('.txt')  # save inference images
+    save_img = not nosave # and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
     webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
@@ -124,7 +124,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
     # Dataloader
     if webcam:
-        view_img = check_imshow()
+        # view_img = check_imshow()
+        view_img = False
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
@@ -198,7 +199,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
             p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # im.jpg
+            save_path = str(save_dir / (str(i) + p.name))  # im.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
@@ -232,7 +233,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     if True: 
                         camera_id = i # Not this generally but will depend which camera we use simutaneously.
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        unique_obj_id = 6 * obj_id + i # Camera i will only output objects with id congruent to i modulo 6
+                        unique_obj_id = i # Camera i will only output objects with id congruent to i modulo 6
                         out_msg = projecteur(xywh, camera_id, unique_obj_id, rostime_now, rosmsg=True)
                         publisher.publish(out_msg)
                     

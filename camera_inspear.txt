@@ -2,5 +2,5 @@ rtsp://admin:Inspear_2021@192.168.1.21:554/Streaming/Channels/101/?transportmode
 rtsp://admin:Inspear_2021@192.168.1.22:554/Streaming/Channels/101/?transportmode=unicast
 rtsp://admin:Inspear_2021@192.168.1.23:554/Streaming/Channels/101/?transportmode=unicast
 rtsp://admin:Inspear_2021@192.168.1.24:554/Streaming/Channels/101/?transportmode=unicast
-rtsp://admin:Inspear_2021@192.168.1.25:554/Streaming/Channels/101/?transportmode=unicast
+rtsp://admin:Inspear_2021@192.168.1.24:554/Streaming/Channels/101/?transportmode=unicast
 rtsp://admin:Inspear_2021@192.168.1.26:554/Streaming/Channels/101/?transportmode=unicast
