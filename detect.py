@@ -155,7 +155,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
     rospy.Subscriber('/sbg/ekf_quat', SbgEkfQuat, callback_quat, queue_size = 1)    
     rospy.Subscriber('/sbg/ekf_nav', SbgEkfNav, callback_nav, queue_size = 1)    
-    rate = rospy.Rate(10)
     projecteur = Projecteur()
     for path, im, im0s, vid_cap, s in dataset:
         

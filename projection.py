@@ -62,7 +62,7 @@ class Projecteur:
             [0, 0, 0],
             degrees=True,
         )
-
+        
         self.ENU = ENU
 
     def update(
@@ -80,7 +80,7 @@ class Projecteur:
             [getattr(QuatMsg.quaternion, attr) for attr in ["x", "y", "z", "w"]]
         )
         self.camera_orientation = self.camera_orientation_initial * self.boat_orientation
-        self.boat_position = NavMsg
+        self.navigation_data = NavMsg
 
     def __call__(self, xywh, camera_id, obj_id, rostime, rosmsg=False,):
         """
@@ -133,8 +133,8 @@ class Projecteur:
 
         # Déduction des coordonnées GPS de la cible.
         lat_target, lon_target = new_point_offset(
-            self.boat_position.latitude,
-            self.boat_position.longitude,
+            self.navigation_data.latitude,
+            self.navigation_data.longitude,
             azimuth,
             distance,
         )
@@ -144,6 +144,7 @@ class Projecteur:
                 id=int(obj_id),
                 status=1,
                 latitude=lat_target,
+                refresh=rostime,
                 longitude=lon_target,
                 speed=0,
                 size=target_width,
