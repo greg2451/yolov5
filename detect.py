@@ -215,44 +215,58 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 if not no_kalman :
-                    tracked_objects = object_trackers[i].update(reversed(det).cpu())
-                    detection_number = 0
-                    confs = det[:,4]
+                    object_trackers[i].update(reversed(det).cpu())
                     dt[2] += time_sync() - t3
 
                 else:
                     tracked_objects = reversed(det)
+            else:
+                
+                # Important to update even with empty detections !
+                object_trackers[i].update([])
+                
+            # Write results
+            for tracker in object_trackers[i].trackers:
+                if not no_kalman:
+                    xyxy, conf, cls, obj_id = tracker.get_state()[0], tracker.score, tracker.objclass, tracker.id + 1
+                    status = 1 if (tracker.hits < min_hits) else (3 if tracker.time_since_update > 0 else 2)
 
-                # Write results
-                for *xyxy, conf, cls in tracked_objects:
+                # Format and send the message!
+                if True: 
+                    vy = tracker.vy[0]
+                    vx = tracker.vx[0]
+                    camera_id = i # Not this generally but will depend which camera we use simutaneously.
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                    unique_obj_id = i # Camera i will only output objects with id congruent to i modulo 6
+                    out_msg = projecteur(
+                        xywh,
+                        camera_id,
+                        unique_obj_id,
+                        rostime_now,
+                        vx=vx,
+                        vy=vy,
+                        fps=30, # To get the time information in speed.
+                        status=status,
+                        rosmsg=True,
+                        )
+                    publisher.publish(out_msg)
+                
+                if save_txt:  # Write to file
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                    line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                    with open(txt_path + '.txt', 'a') as f:
+                        f.write(('%g ' * len(line)).rstrip() % line + '\n')
+
+                if save_img or save_crop or view_img:  # Add bbox to image
                     if not no_kalman:
-                        obj_id = conf
-                        conf = confs[detection_number]
-                        detection_number += 1
-                    # Format and send the message!
-                    if True: 
-                        camera_id = i # Not this generally but will depend which camera we use simutaneously.
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        unique_obj_id = i # Camera i will only output objects with id congruent to i modulo 6
-                        out_msg = projecteur(xywh, camera_id, unique_obj_id, rostime_now, rosmsg=True)
-                        publisher.publish(out_msg)
-                    
-                    if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                    if save_img or save_crop or view_img:  # Add bbox to image
-                        if not no_kalman:
-                            c = int(obj_id)
-                            label = None if hide_labels else (str(c) if hide_conf else f'{c} {conf:.3f}')
-                        else:
-                            c = int(cls)  # integer class
-                            label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
-                        annotator.box_label(xyxy, label, color=colors(c, True))
-                        if save_crop:
-                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+                        label = None if hide_labels else (f'st: {status}, id: {int(obj_id)}' if hide_conf else f'st: {status}, id: {int(obj_id)}, conf: {conf:.3f}')
+                        c = status
+                    else:
+                        c = int(cls)  # integer class
+                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.3f}')
+                    annotator.box_label(xyxy, label, color=colors(c, True))
+                    if save_crop:
+                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
             # Stream results
             im0 = annotator.result()

@@ -83,7 +83,7 @@ class Projecteur:
         self.camera_orientation = self.camera_orientation_initial * self.boat_orientation
         self.navigation_data = NavMsg
 
-    def __call__(self, xywh, camera_id, obj_id, rostime, rosmsg=False,):
+    def __call__(self, xywh, camera_id, obj_id, rostime, status, vx, vy, fps, rosmsg=False,):
         """
         Etant donné les coordonnées d'un point en convention OpenCV, renvoie le gisement de ce point (en degrés) et la position de ce point.
         """
@@ -94,6 +94,10 @@ class Projecteur:
         y = (0.5 - y) * self.screen_dim[1]  # Incohérence de signe entre convention OpenCV et NED sinon.
         w = w * self.screen_dim[0]
         h = h * self.screen_dim[1]
+        
+        # Convert speeds. Note that the current FPS inference time is needed.
+        # That is because no temporal information is encoded in the videos.
+        # vx, vy 
 
         # Récupération du roulis relatif à la caméra.
         # Rotation associée à l'angle -roll pour stabiliser la caméra (d'où le signe moins en bas).
@@ -143,7 +147,7 @@ class Projecteur:
         if rosmsg:
             message = ContactUnit(
                 id=int(obj_id),
-                status=1,
+                status=status,
                 latitude=lat_target,
                 refresh=rostime,
                 longitude=lon_target,
