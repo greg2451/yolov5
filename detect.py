@@ -157,7 +157,13 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     rospy.Subscriber('/sbg/ekf_quat', SbgEkfQuat, callback_quat, queue_size = 1)    
     rospy.Subscriber('/sbg/ekf_nav', SbgEkfNav, callback_nav, queue_size = 1)    
     projecteur = Projecteur()
+    
+    # Used only for the first frame where no estimates of speed are available.
+    fps = 10 
+    
     for path, im, im0s, vid_cap, s in dataset:
+        
+        t1 = time_sync()
         
         # Update proj with current values.
         projecteur.update(
@@ -167,7 +173,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         
         rostime_now = rospy.get_rostime()
         
-        t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -224,7 +229,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 
                 # Important to update even with empty detections !
                 object_trackers[i].update([])
-                
+
             # Write results
             for tracker in object_trackers[i].trackers:
                 if not no_kalman:
@@ -243,10 +248,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         camera_id,
                         unique_obj_id,
                         rostime_now,
-                        vx=vx,
-                        vy=vy,
-                        fps=30, # To get the time information in speed.
-                        status=status,
+                        status,
+                        vx,
+                        vy,
+                        fps=fps, # To get the time information in speed.
                         rosmsg=True,
                         )
                     publisher.publish(out_msg)
@@ -293,8 +298,15 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
-        # Print time (inference-only)
-        LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+        # Full pipeline duration.
+        t4 = time_sync()
+        
+        # Smoothed frequency.
+        fps = 1/3 * 1/(t4-t1) + 2/3 * fps
+
+        # Print time (all pipeline)
+        LOGGER.info(f'{s}Done. ({t4 - t1:.3f}s)')
+
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)

@@ -63,7 +63,7 @@ class Projecteur:
             [0, 0, 0],
             degrees=True,
         )
-        
+
         self.ENU = ENU
 
     def update(
@@ -83,7 +83,18 @@ class Projecteur:
         self.camera_orientation = self.camera_orientation_initial * self.boat_orientation
         self.navigation_data = NavMsg
 
-    def __call__(self, xywh, camera_id, obj_id, rostime, status, vx, vy, fps, rosmsg=False,):
+    def __call__(
+        self,
+        xywh,
+        camera_id,
+        obj_id,
+        rostime,
+        status,
+        vx,
+        vy,
+        fps,
+        rosmsg=False,
+    ):
         """
         Etant donné les coordonnées d'un point en convention OpenCV, renvoie le gisement de ce point (en degrés) et la position de ce point.
         """
@@ -94,10 +105,7 @@ class Projecteur:
         y = (0.5 - y) * self.screen_dim[1]  # Incohérence de signe entre convention OpenCV et NED sinon.
         w = w * self.screen_dim[0]
         h = h * self.screen_dim[1]
-        
-        # Convert speeds. Note that the current FPS inference time is needed.
-        # That is because no temporal information is encoded in the videos.
-        # vx, vy 
+
 
         # Récupération du roulis relatif à la caméra.
         # Rotation associée à l'angle -roll pour stabiliser la caméra (d'où le signe moins en bas).
@@ -111,7 +119,7 @@ class Projecteur:
         # donne : f-1(r) = r -br**2 + 2b**2 * r**3 + (-c -5b**3)r**4
         ri2 = x ** 2 + y ** 2
         ri = sqrt(ri2)
-        rf = ri - self.b * ri2 + 2 * (self.b ** 2) * ri * ri2 + (-self.c - 5 * self.b ** 3) * ri2 ** 2
+        rf = ri - self.b * ri2 + 2 * (self.b ** 2) * ri * ri2 + (-self.c - 5 * self.b ** 3) * (ri2 ** 2)
 
         # Calcul de conversion pixel vers angle.
         def pixel2angle(pixel):
@@ -136,6 +144,20 @@ class Projecteur:
         target_height = 2 * distance * tan(angular_height / 2)
         target_width = 2 * distance * tan(angular_width / 2)
 
+        # Convert speeds. Note that the current FPS inference time is needed.
+        # That is because no temporal information is encoded in the videos.
+        v2 = vx ** 2 + vy ** 2
+        v = sqrt(v2)
+        vf = v - self.b * v2 + 2 * (self.b ** 2) * v * v2 + (-self.c - 5 * self.b ** 3) * (v2 ** 2)
+        
+        vx_angular = arctan(vx * (vf / (v + 10e-9)) / self.f)
+        vy_angular = arctan(vy * (vf / (v + 10e-9)) / self.f)
+        
+        vx_projected = 2 * distance * tan(vx_angular / 2) * fps
+        vy_projected = 2 * distance * tan(vy_angular / 2) * fps
+        
+        v_projected = sqrt(vx_projected ** 2 + vy_projected ** 2)
+
         # Déduction des coordonnées GPS de la cible.
         lat_target, lon_target = new_point_offset(
             self.navigation_data.latitude,
@@ -149,10 +171,10 @@ class Projecteur:
                 id=int(obj_id),
                 status=status,
                 latitude=lat_target,
-                refresh=rostime,
                 longitude=lon_target,
-                speed=distance,
+                speed=v_projected,
                 size=target_width,
+                refresh=rostime,
             )
 
             return message
