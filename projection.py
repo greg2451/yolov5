@@ -138,7 +138,7 @@ class Projecteur:
         # Convention OpenCV, (0,0) est le coin supérieur gauche.
 
         # Calcul de la distance en considérant son altitude nulle (dépendance extrêmement sensible en l'élévation).
-        distance = (self.camera_height - self.boat_position.altitude) / tan(elevation)
+        distance = (self.camera_height - self.navigation_data.altitude) / tan(elevation)
 
         # Déduction de la hauteur et largeur du plus petit rectangle couvrant la cible.
         target_height = 2 * distance * tan(angular_height / 2)

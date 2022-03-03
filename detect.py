@@ -92,6 +92,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         no_kalman=False, # use kalman filtering
         min_hits=5, # parameter for kalman filter
         max_age=1, # parameter of duration
+        ned=False, # setting of the inertial device
         ):
     
     source = str(source)
@@ -156,7 +157,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
     rospy.Subscriber('/sbg/ekf_quat', SbgEkfQuat, callback_quat, queue_size = 1)    
     rospy.Subscriber('/sbg/ekf_nav', SbgEkfNav, callback_nav, queue_size = 1)    
-    projecteur = Projecteur()
+    projecteur = Projecteur(ENU=(not ned))
     
     # Used only for the first frame where no estimates of speed are available.
     fps = 10 
@@ -238,8 +239,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
                 # Format and send the message!
                 if True: 
-                    vy = tracker.vy[0]
-                    vx = tracker.vx[0]
+                    vy = tracker.vy
+                    vx = tracker.vx
                     camera_id = i # Not this generally but will depend which camera we use simutaneously.
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                     unique_obj_id = i # Camera i will only output objects with id congruent to i modulo 6
@@ -350,6 +351,7 @@ def parse_opt():
     parser.add_argument('--no-kalman', action='store_true', help="don't use kalman filtering")
     parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
+    parser.add_argument('--ned', action='store_true', help="don't use kalman filtering")
     
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
