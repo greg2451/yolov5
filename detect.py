@@ -243,7 +243,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     vx = tracker.vx
                     camera_id = i # Not this generally but will depend which camera we use simutaneously.
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    unique_obj_id = i # Camera i will only output objects with id congruent to i modulo 6
+                    unique_obj_id = (6 * obj_id + i) % 256 # Camera i will only output objects with id congruent to i modulo 6
                     out_msg = projecteur(
                         xywh,
                         camera_id,
