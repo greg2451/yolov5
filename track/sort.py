@@ -17,7 +17,7 @@
 """
 from __future__ import print_function
 
-from numba import jit
+#from numba import jit
 import os.path
 import numpy as np
 from scipy.optimize import linear_sum_assignment as linear_assignment
@@ -25,7 +25,7 @@ import time
 import argparse
 from filterpy.kalman import KalmanFilter
 
-@jit
+#@jit
 def iou(bb_test, bb_gt):
     """
     Computes IUO between two bboxes in the form [x1,y1,x2,y2]
