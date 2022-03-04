@@ -33,7 +33,7 @@ class Projecteur:
         b=-0.00022355714835994704,
         c=-9.927438097191326e-11,
         screen_dim=[1280, 720],
-        camera_orientation=[[-60 * i, 22.4, 0] for i in range(6)],
+        camera_orientation=[[60 * i, -7.3, 0] for i in range(6)],
         # Pour NED, camera_orientation = [[60 * i, -22.4, 0] for i in range(6)]
         # Plus généralement il suffit d'opposer les signes de yaw et pitch.
         camera_height=1.8,
@@ -138,7 +138,7 @@ class Projecteur:
         # Convention OpenCV, (0,0) est le coin supérieur gauche.
 
         # Calcul de la distance en considérant son altitude nulle (dépendance extrêmement sensible en l'élévation).
-        distance = (self.camera_height - self.navigation_data.altitude) / tan(elevation)
+        distance = (self.camera_height) / abs(tan(elevation))
 
         # Déduction de la hauteur et largeur du plus petit rectangle couvrant la cible.
         target_height = 2 * distance * tan(angular_height / 2)
@@ -173,6 +173,9 @@ class Projecteur:
                 latitude=lat_target,
                 longitude=lon_target,
                 speed=v_projected,
+                altitude=degrees(azimuth),
+                heading=distance,
+                position_covariance=[int(obj_id) % 6,0,0,0],
                 size=target_width,
                 refresh=rostime,
             )

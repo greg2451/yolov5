@@ -255,7 +255,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         fps=fps, # To get the time information in speed.
                         rosmsg=True,
                         )
-                    publisher.publish(out_msg)
+                    if (out_msg.heading > 10) & (out_msg.status != 1):
+                        publisher.publish(out_msg)
                 
                 if save_txt:  # Write to file
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
