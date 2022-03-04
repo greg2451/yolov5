@@ -115,7 +115,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
     
     # Initialize ROS node
-    rospy.init_node('VisionTrackProducer', anonymous=True)    
+    rospy.init_node('optical_radar', anonymous=True)    
     publisher = rospy.Publisher('/commands/int_targets/optical', ContactUnit, queue_size = 10)
     
     # Half
@@ -322,7 +322,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT/ 'gdn.pt', help='model path(s)')
     parser.add_argument('--source', type=str, default=ROOT/ "ShipSpotting1.mp4", help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
+    parser.add_argument('--data', type=str, default=ROOT / 'data/seaowl.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
@@ -351,7 +351,9 @@ def parse_opt():
     parser.add_argument('--no-kalman', action='store_true', help="don't use kalman filtering")
     parser.add_argument('--min-hits', default=5, type=int, help='kalman min hits')
     parser.add_argument('--max-age', default=1, type=int, help='kalman max age')
-    parser.add_argument('--ned', action='store_true', help="don't use kalman filtering")
+    
+    # Orientation args
+    parser.add_argument('--ned', action='store_true', help="use NED system of coordinates. Need to update camera orientation in projector")
     
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
