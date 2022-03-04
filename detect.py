@@ -201,7 +201,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 if not no_kalman :
-                    tracked_objects = mot_tracker.update(reversed(det).cpu())
+                    _ = mot_tracker.update(reversed(det).cpu())
+                    tracked_objects = mot_tracker.trackers
                     detection_number = 0
                     confs = det[:,4]
                     dt[2] += time_sync() - t3
@@ -210,11 +211,14 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     tracked_objects = reversed(det)
 
                 # Write results
-                for *xyxy, conf, cls in tracked_objects:
+                for tracker in tracked_objects:
                     if not no_kalman:
-                        obj_id = conf
-                        conf = confs[detection_number]
-                        detection_number += 1
+                        xyxy, conf, cls, obj_id = tracker.get_state()[0], tracker.score, tracker.objclass, tracker.id + 1
+                        # d = tracker.get_state()[0]
+                        # np.concatenate((d, [tracker.id + 1], [tracker.objclass])).reshape(1, -1)
+                        # obj_id = conf
+                        # conf = confs[detection_number]
+                        # detection_number += 1
 
                     if save_txt & (not save_kalman):  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -232,18 +236,20 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
                     if save_img or save_crop or view_img:  # Add bbox to image
                         if not no_kalman:
+                            status = 1 if (tracker.hits < min_hits) else (3 if tracker.time_since_update > 0 else 2)
                             # x = mot_tracker.trackers[int(obj_id-1)].kf.x
-                            trk = next((x for x in mot_tracker.trackers if x.id == int(obj_id-1)))
-                            if True | (trk.hits <= 60):
+                            # tracker = next((x for x in mot_tracker.trackers if x.id == int(obj_id-1)))
+                            if True | (tracker.hits <= 60):
                                 label = 'Not enough points'
-                                label = f'{int(obj_id)} {conf:.3f}'
+                                label = f'status: {status}, id: {int(obj_id)}, conf: {conf:.3f}'
+                                c = status
                             else :
-                                # vy = mean(trk.vy[-60:])
-                                # vx = mean(trk.vx[-60:])
-                                vy = trk.vy[0]
-                                vx = trk.vx[0]
-                                y = trk.ym[0]
-                                x = trk.xm[0]
+                                # vy = mean(tracker.vy[-60:])
+                                # vx = mean(tracker.vx[-60:])
+                                vy = tracker.vy[0]
+                                vx = tracker.vx[0]
+                                y = tracker.ym[0]
+                                x = tracker.xm[0]
                                 c = int(obj_id)
                                 # label = None if hide_labels else (str(c) if hide_conf else f'{c} {conf:.3f}')
                                 # label = f'vx:{vx:.2f} vy:{vy:.2f}'
